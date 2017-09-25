@@ -1,4 +1,4 @@
-# Neo4j Movies Example Application - `neo4j-driver` Edition
+# Neo4j CVET Tool Prototype - `neo4j-driver` Edition
 
 ![image of application](./img/demo.png)
 
