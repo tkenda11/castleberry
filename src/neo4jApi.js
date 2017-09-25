@@ -1,24 +1,21 @@
 require('file?name=[name].[ext]!../node_modules/neo4j-driver/lib/browser/neo4j-web.min.js');
-var Movie = require('./models/Movie');
-var MovieCast = require('./models/MovieCast');
+var System = require('./models/System');
+var Func = require('./models/Func');
+var Project = require('./models/Project');
+
 var _ = require('lodash');
 
 var neo4j = window.neo4j.v1;
-var driver = neo4j.driver("bolt://localhost", neo4j.auth.basic("neo4j", "abcde"));
+var driver = neo4j.driver("bolt://localhost", neo4j.auth.basic("neo4j", "857841"));
 
-function searchMovies(queryString) {
+function searchFunctions(queryString) {
   var session = driver.session();
   return session
-    .run(
-      'MATCH (movie:Movie) \
-      WHERE movie.title =~ {title} \
-      RETURN movie',
-      {title: '(?i).*' + queryString + '.*'}
-    )
+    .run(queryString)
     .then(result => {
       session.close();
       return result.records.map(record => {
-        return new Movie(record.get('movie'));
+        return new Func(record.get('func'));
       });
     })
     .catch(error => {
@@ -27,24 +24,15 @@ function searchMovies(queryString) {
     });
 }
 
-function getMovie(title) {
+function searchSystems(queryString) {
   var session = driver.session();
   return session
-    .run(
-      "MATCH (movie:Movie {title:{title}}) \
-      OPTIONAL MATCH (movie)<-[r]-(person:Person) \
-      RETURN movie.title AS title, \
-      collect([person.name, \
-           head(split(lower(type(r)), '_')), r.roles]) AS cast \
-      LIMIT 1", {title})
+    .run(queryString)
     .then(result => {
       session.close();
-
-      if (_.isEmpty(result.records))
-        return null;
-
-      var record = result.records[0];
-      return new MovieCast(record.get('title'), record.get('cast'));
+      return result.records.map(record => {
+        return new System(record.get('system'));
+      });
     })
     .catch(error => {
       session.close();
@@ -52,37 +40,56 @@ function getMovie(title) {
     });
 }
 
-function getGraph() {
+function searchProjects(queryString) {
   var session = driver.session();
-  return session.run(
-    'MATCH (m:Movie)<-[:ACTED_IN]-(a:Person) \
-    RETURN m.title AS movie, collect(a.name) AS cast \
-    LIMIT {limit}', {limit: 100})
+  return session
+    .run(queryString)
+    .then(result => {
+      session.close();
+      return result.records.map(record => {
+        return new Project(record.get('project'));
+      });
+    })
+    .catch(error => {
+      session.close();
+      throw error;
+    });
+}
+
+function getGraph(scope) {
+  var session = driver.session();
+  if(scope) {
+     var query=scope;
+  }
+  else {
+     var query='MATCH (project:CVET_project)-[r]-(c) RETURN project.name as project,collect(c.name) AS connected,collect(labels(c)) as types';
+  }
+  return session.run(query)
     .then(results => {
       session.close();
       var nodes = [], rels = [], i = 0;
       results.records.forEach(res => {
-        nodes.push({title: res.get('movie'), label: 'movie'});
+        nodes.push({title: res.get('project'), label: 'project'});
         var target = i;
         i++;
-
-        res.get('cast').forEach(name => {
-          var actor = {title: name, label: 'actor'};
-          var source = _.findIndex(nodes, actor);
+        res.get('connected').forEach(name => {
+          var cNode = {title: name, label: 'cNode'};
+          var source = _.findIndex(nodes, cNode);
           if (source == -1) {
-            nodes.push(actor);
+            nodes.push(cNode);
             source = i;
             i++;
           }
+        
           rels.push({source, target})
         })
       });
-
       return {nodes, links: rels};
     });
 }
 
-exports.searchMovies = searchMovies;
-exports.getMovie = getMovie;
 exports.getGraph = getGraph;
+exports.searchSystems = searchSystems;
+exports.searchFunctions = searchFunctions;
+exports.searchProjects = searchProjects;
 
